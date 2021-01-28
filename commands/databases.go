@@ -1221,16 +1221,46 @@ func databaseFirewalls() *Command {
 // RunDatabaseFirewallRulesUpdate updates the maintenance window info for a database cluster
 func RunDatabaseFirewallRulesUpdate(c *CmdConfig) error {
 	id := c.Args[0]
-	r, err := buildDatabaseUpdateFirewallRulesRequestFromArgs(c)
+	r, err := buildDatabaseUpdateFirewallRulesRequestFromArgs(c, id)
 	if err != nil {
 		return err
 	}
 
-	return c.Databases().UpdateFirewallRules(id, r)
+	if err := c.Databases().UpdateFirewallRules(id, r); err != nil {
+		return err
+	}
+
+	// Because the update method does not return the list of updated firewall
+	// rules, call the list endpoint again in order to display the changes.
+	rules, err := c.Databases().GetFirewallRules(id)
+	if err != nil {
+		notice("update firewall rules sucessfully, but failed to list new rules")
+		return err
+	}
+
+	return displayDatabaseFirewallRules(c, true, rules...)
 }
 
-func buildDatabaseUpdateFirewallRulesRequestFromArgs(c *CmdConfig) (*godo.DatabaseUpdateFirewallRulesRequest, error) {
+func buildDatabaseUpdateFirewallRulesRequestFromArgs(c *CmdConfig, clusterUUID string) (*godo.DatabaseUpdateFirewallRulesRequest, error) {
 	r := &godo.DatabaseUpdateFirewallRulesRequest{}
+
+	// *****
+	// TODO
+	// *****
+	//
+	// Like the create method, we want to ensure that we're replacing rules,
+	// and not overwriting all of the existing rules.
+	//
+	// One approach to doing this is to:
+	//
+	//	1. Ensure that for every rule pair provided as a CLI argument, a UUID
+	//     is present. If no UUID is present, we should return an error
+	//     message, and recommend that the user either provide one, or use the
+	//     `add` command to add a new rule.
+	//	2. When submitting the API request via godo, make sure that any old
+	//     rules are submitted as well (just like in the updated add command).
+	//     The UUID of those old rules **must** be included in order to prevent
+	//     a new UUID being generated for those rules.
 
 	firewallRules, err := c.Doit.GetStringSlice(c.NS, doctl.ArgDatabaseFirewallRules)
 	if err != nil {
@@ -1271,11 +1301,14 @@ func extractFirewallRules(rulesStringList []string) (rules []*godo.DatabaseFirew
 
 }
 
-// RunDatabaseFirewallRulesCreate creates a firewall rule for a database cluster
+// RunDatabaseFirewallRulesCreate creates a firewall rule for a database cluster.
+//
+// Any new rules will be appended to the existing rules. If you want to update
+// rules, use RunDatabaseFirewallRulesUpdate and provide a rule UUID.
 func RunDatabaseFirewallRulesCreate(c *CmdConfig) error {
-	// if len(c.Args) < 1 {
-	// 	return doctl.NewMissingArgsErr(c.NS)
-	// }
+	if len(c.Args) < 1 {
+		return doctl.NewMissingArgsErr(c.NS)
+	}
 
 	databaseID := c.Args[0]
 	firewallRuleArg, err := c.Doit.GetString(c.NS, doctl.ArgDatabaseFirewallRules)
@@ -1288,14 +1321,54 @@ func RunDatabaseFirewallRulesCreate(c *CmdConfig) error {
 		return fmt.Errorf("Unexpected input value [%v], must be a key:value pair", pair)
 	}
 
-	req := &godo.DatabaseCreateFirewallRuleRequest{
-		Type:  pair[0],
-		Value: pair[1],
-	}
-
-	dbr, err := c.Databases().CreateFirewallRule(databaseID, req)
+	// Retrieve any existing firewall rules so that we don't destroy existing
+	// rules in the create request.
+	rules, err := c.Databases().GetFirewallRules(databaseID)
 	if err != nil {
 		return err
 	}
-	return displayDatabaseFirewallRules(c, true, *dbr)
+
+	// To start, create a slice of database firewall rules containing only the
+	// new rules.
+	firewallRules := []*godo.DatabaseFirewallRule{
+		{
+			Type:  pair[0],
+			Value: pair[1],
+		},
+	}
+
+	// Next, add the existing rules onto that slice of database firewall rules
+	// so that we don't delete them when submitting the request.
+	//
+	// Any request to the update endpoint removes all old rules and full
+	// replaces them with new ones, making this necessary to provide CLI users
+	// with expected behaviour.
+	for _, rule := range rules {
+		firewallRules = append(firewallRules, &godo.DatabaseFirewallRule{
+			UUID:        rule.UUID,
+			ClusterUUID: rule.ClusterUUID,
+			Type:        rule.Type,
+			Value:       rule.Value,
+		})
+	}
+
+	// The `UpdateFirewallRules` method is the only one that allows submitting
+	// a slice of firewall rules, so we need to use that instead of the create
+	// method.
+	//
+	// This ends up being the same since godo uses a PUT request to the
+	// firewall endpoint in either case.
+	if err := c.Databases().UpdateFirewallRules(databaseID, &godo.DatabaseUpdateFirewallRulesRequest{
+		Rules: firewallRules,
+	}); err != nil {
+		return err
+	}
+
+	// The UpdateFirewallRules command doesn't return the updated rules, so we
+	// need to call list again to retrieve them in order to display them.
+	rules, err = c.Databases().GetFirewallRules(databaseID)
+	if err != nil {
+		return err
+	}
+	return displayDatabaseFirewallRules(c, true, rules...)
 }

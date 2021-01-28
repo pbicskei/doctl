@@ -62,8 +62,13 @@ var _ = suite("database/firewalls", func(t *testing.T, when spec.G, it spec.S) {
 
 			output, err := cmd.CombinedOutput()
 			expect.NoError(err, fmt.Sprintf("received error output: %s", output))
-			// maybe compare strings directly with trim spaces
-			expect.Equal(strings.TrimSpace(databasesUpdateFirewallRuleOutput), strings.TrimSpace(string(output)))
+
+			expected := strings.TrimSpace(databasesUpdateFirewallRuleOutput)
+			actual := strings.TrimSpace(string(output))
+
+			if expected != actual {
+				t.Errorf("expected\n\n%s\n\nbut got\n\n%s\n\n", expected, actual)
+			}
 		})
 	})
 
