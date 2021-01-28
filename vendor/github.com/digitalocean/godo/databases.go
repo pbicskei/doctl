@@ -120,6 +120,7 @@ type DatabasesService interface {
 	SetSQLMode(context.Context, string, ...string) (*Response, error)
 	GetFirewallRules(context.Context, string) ([]DatabaseFirewallRule, *Response, error)
 	UpdateFirewallRules(context.Context, string, *DatabaseUpdateFirewallRulesRequest) (*Response, error)
+	CreateFirewallRule(context.Context, string, *DatabaseCreateFirewallRuleRequest) (*DatabaseFirewallRule, *Response, error)
 }
 
 // DatabasesServiceOp handles communication with the Databases related methods
@@ -302,6 +303,13 @@ type DatabaseFirewallRule struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+type DatabaseCreateFirewallRuleRequest struct {
+	UUID        string `json:"uuid"`
+	ClusterUUID string `json:"cluster_uuid"`
+	Type        string `json:"type"`
+	Value       string `json:"value"`
+}
+
 type databaseUserRoot struct {
 	User *DatabaseUser `json:"user"`
 }
@@ -354,8 +362,12 @@ type sqlModeRoot struct {
 	SQLMode string `json:"sql_mode"`
 }
 
-type databaseFirewallRuleRoot struct {
+type databaseFirewallRulesRoot struct {
 	Rules []DatabaseFirewallRule `json:"rules"`
+}
+
+type databaseFirewallRuleRoot struct {
+	Rule *DatabaseFirewallRule `json:"rule"`
 }
 
 // URN returns a URN identifier for the database
@@ -821,7 +833,7 @@ func (svc *DatabasesServiceOp) SetSQLMode(ctx context.Context, databaseID string
 // GetFirewallRules loads the inbound sources for a given cluster.
 func (svc *DatabasesServiceOp) GetFirewallRules(ctx context.Context, databaseID string) ([]DatabaseFirewallRule, *Response, error) {
 	path := fmt.Sprintf(databaseFirewallRulesPath, databaseID)
-	root := new(databaseFirewallRuleRoot)
+	root := new(databaseFirewallRulesRoot)
 	req, err := svc.client.NewRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, nil, err
@@ -835,7 +847,7 @@ func (svc *DatabasesServiceOp) GetFirewallRules(ctx context.Context, databaseID 
 	return root.Rules, resp, nil
 }
 
-// UpdateFirewallRules sets the inbound sources for a given cluster.
+// UpdateFirewallRules update a database cluster's firewall rules.
 func (svc *DatabasesServiceOp) UpdateFirewallRules(ctx context.Context, databaseID string, firewallRulesReq *DatabaseUpdateFirewallRulesRequest) (*Response, error) {
 	path := fmt.Sprintf(databaseFirewallRulesPath, databaseID)
 	req, err := svc.client.NewRequest(ctx, http.MethodPut, path, firewallRulesReq)
@@ -843,4 +855,21 @@ func (svc *DatabasesServiceOp) UpdateFirewallRules(ctx context.Context, database
 		return nil, err
 	}
 	return svc.client.Do(ctx, req, nil)
+}
+
+// CreateFirewallRules update a database cluster's firewall rules.
+func (svc *DatabasesServiceOp) CreateFirewallRule(ctx context.Context, databaseID string, createFirewall *DatabaseCreateFirewallRuleRequest) (*DatabaseFirewallRule, *Response, error) {
+	path := fmt.Sprintf(databaseFirewallRulesPath, databaseID)
+	fmt.Println(path)
+	req, err := svc.client.NewRequest(ctx, http.MethodPost, path, createFirewall)
+	if err != nil {
+		return nil, nil, err
+	}
+	root := new(databaseFirewallRuleRoot)
+	resp, err := svc.client.Do(ctx, req, root)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return root.Rule, resp, nil
 }

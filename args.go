@@ -335,4 +335,7 @@ const (
 
 	// ArgOneClickType is the type of 1-Click
 	ArgOneClickType = "type"
+
+	// ArgDatabaseFirewallRule the firewall rules.
+	ArgDatabaseFirewallRules = "rules"
 )

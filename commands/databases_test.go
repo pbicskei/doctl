@@ -166,6 +166,7 @@ func TestDatabasesCommand(t *testing.T) {
 		"pool",
 		"db",
 		"sql-mode",
+		"firewalls",
 	)
 }
 
