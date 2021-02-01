@@ -337,5 +337,8 @@ const (
 	ArgOneClickType = "type"
 
 	// ArgDatabaseFirewallRule the firewall rules.
-	ArgDatabaseFirewallRules = "rules"
+	ArgDatabaseFirewallRule = "rule"
+
+	// ArgDatabaseFirewallRuleUUID is the UUID for the firewall rules.
+	ArgDatabaseFirewallRuleUUID = "uuid"
 )

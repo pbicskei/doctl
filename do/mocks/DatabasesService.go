@@ -509,17 +509,3 @@ func (mr *MockDatabasesServiceMockRecorder) UpdateFirewallRules(databaseID, req 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFirewallRules", reflect.TypeOf((*MockDatabasesService)(nil).UpdateFirewallRules), databaseID, req)
 }
-
-// UpdateFirewallRules mocks base method.
-func (m *MockDatabasesService) CreateFirewallRule(databaseID string, req *godo.DatabaseCreateFirewallRuleRequest) (*godo.DatabaseCreateFirewallRuleRequest, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateFirewallRule", databaseID, req)
-	ret0, _ := ret[0].(error)
-	return nil, ret0
-}
-
-// UpdateFirewallRules indicates an expected call of UpdateFirewallRules.
-func (mr *MockDatabasesServiceMockRecorder) CreateFirewallRule(databaseID, req interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateFirewallRule", reflect.TypeOf((*MockDatabasesService)(nil).CreateFirewallRule), databaseID, req)
-}

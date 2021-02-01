@@ -120,7 +120,7 @@ type DatabasesService interface {
 	SetSQLMode(context.Context, string, ...string) (*Response, error)
 	GetFirewallRules(context.Context, string) ([]DatabaseFirewallRule, *Response, error)
 	UpdateFirewallRules(context.Context, string, *DatabaseUpdateFirewallRulesRequest) (*Response, error)
-	CreateFirewallRule(context.Context, string, *DatabaseCreateFirewallRuleRequest) (*DatabaseFirewallRule, *Response, error)
+	PatchFirewallRules(ctx context.Context, databaseID string, firewallRulesReq *DatabasePatchFirewallRulesRequest) (*Response, error)
 }
 
 // DatabasesServiceOp handles communication with the Databases related methods
@@ -291,7 +291,26 @@ type DatabaseCreateReplicaRequest struct {
 
 // DatabaseUpdateFirewallRulesRequest is used to set the firewall rules for a database
 type DatabaseUpdateFirewallRulesRequest struct {
-	Rules []*DatabaseFirewallRule `json:"rules"`
+	Rules []*DatabaseUpdateFirewallRule `json:"rules"`
+}
+
+// DatabaseUpdateFirewallRule is used to set the firewall rules for a database
+type DatabaseUpdateFirewallRule struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+// DatabasePatchFirewallRule is used to set the firewall rules for a database
+type DatabasePatchFirewallRule struct {
+	Type        string `json:"type"`
+	Value       string `json:"value"`
+	UUID        string `json:"uuid"`
+	ClusterUUID string `json:"cluster_uuid"`
+}
+
+// DatabasePatchFirewallRulesRequest is used to set the firewall rules for a database
+type DatabasePatchFirewallRulesRequest struct {
+	Rules []*DatabasePatchFirewallRule `json:"rules"`
 }
 
 // DatabaseFirewallRule is a rule describing an inbound source to a database
@@ -301,13 +320,6 @@ type DatabaseFirewallRule struct {
 	Type        string    `json:"type"`
 	Value       string    `json:"value"`
 	CreatedAt   time.Time `json:"created_at"`
-}
-
-type DatabaseCreateFirewallRuleRequest struct {
-	UUID        string `json:"uuid"`
-	ClusterUUID string `json:"cluster_uuid"`
-	Type        string `json:"type"`
-	Value       string `json:"value"`
 }
 
 type databaseUserRoot struct {
@@ -364,10 +376,6 @@ type sqlModeRoot struct {
 
 type databaseFirewallRulesRoot struct {
 	Rules []DatabaseFirewallRule `json:"rules"`
-}
-
-type databaseFirewallRuleRoot struct {
-	Rule *DatabaseFirewallRule `json:"rule"`
 }
 
 // URN returns a URN identifier for the database
@@ -857,19 +865,12 @@ func (svc *DatabasesServiceOp) UpdateFirewallRules(ctx context.Context, database
 	return svc.client.Do(ctx, req, nil)
 }
 
-// CreateFirewallRules update a database cluster's firewall rules.
-func (svc *DatabasesServiceOp) CreateFirewallRule(ctx context.Context, databaseID string, createFirewall *DatabaseCreateFirewallRuleRequest) (*DatabaseFirewallRule, *Response, error) {
+// PatchFirewallRules update a database cluster's firewall rules.
+func (svc *DatabasesServiceOp) PatchFirewallRules(ctx context.Context, databaseID string, firewallRulesReq *DatabasePatchFirewallRulesRequest) (*Response, error) {
 	path := fmt.Sprintf(databaseFirewallRulesPath, databaseID)
-	fmt.Println(path)
-	req, err := svc.client.NewRequest(ctx, http.MethodPost, path, createFirewall)
+	req, err := svc.client.NewRequest(ctx, http.MethodPut, path, firewallRulesReq)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	root := new(databaseFirewallRuleRoot)
-	resp, err := svc.client.Do(ctx, req, root)
-	if err != nil {
-		return nil, resp, err
-	}
-
-	return root.Rule, resp, nil
+	return svc.client.Do(ctx, req, nil)
 }

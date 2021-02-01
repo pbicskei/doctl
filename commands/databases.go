@@ -14,6 +14,7 @@ limitations under the License.
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -1154,29 +1155,6 @@ func RunDatabaseSetSQLModes(c *CmdConfig) error {
 	return c.Databases().SetSQLMode(databaseID, sqlModes...)
 }
 
-// RunDatabaseFirewallRulesList retrieves a list of firewalls for specific database cluster
-func RunDatabaseFirewallRulesList(c *CmdConfig) error {
-	if len(c.Args) == 0 {
-		return doctl.NewMissingArgsErr(c.NS)
-	}
-
-	id := c.Args[0]
-
-	firewallRules, err := c.Databases().GetFirewallRules(id)
-	if err != nil {
-		return err
-	}
-
-	return displayDatabaseFirewallRules(c, true, firewallRules...)
-}
-
-func displayDatabaseFirewallRules(c *CmdConfig, short bool, firewallRules ...do.DatabaseFirewallRule) error {
-	item := &displayers.DatabaseFirewallRules{
-		DatabaseFirewallRules: firewallRules,
-	}
-	return c.Display(item)
-}
-
 func databaseFirewalls() *Command {
 	cmd := &Command{
 		Command: &cobra.Command{
@@ -1188,53 +1166,164 @@ func databaseFirewalls() *Command {
 	}
 
 	firewallRuleDetails := `
+This command lists the following details for each firewall rule in a given database:
 
 	- The UUID of the firewall rule
 	- The Cluster UUID for the database cluster to which the rule is applied.
-	- The type of resource that the firewall rule allows to access the database cluster. The possible values are: ` + "`" + `droplet,` + "`" + ` k8s, ` + "`" + ` ip_addr, ` + "`" + ` or  ` + "`" + ` tag'` + "`" + `)
-	- The ID of the specific resource, the name of a tag applied to a group of resources, or the IP address that the firewall rule allows to access the database cluster.
-	- The time value given in ISO8601 combined date and time format that represents when the firewall rule was created.
+	- The Type of resource that the firewall rule allows to access the database cluster. The possible values are: "droplet", "k8s", "ip_addr", or "tag"
+	- The Value is either the ID of the specific resource, the name of a tag applied to a group of resources, or the IP address that the firewall rule allows to access the database cluster.
+	- The Time value given in ISO8601 combined date and time format that represents when the firewall rule was created.
 	`
 	databaseFirewallRuleDetails := `
 
-	This command requires the ID of a database cluster, which you can retrieve by calling:
+This command requires the ID of a database cluster, which you can retrieve by calling:
 
 	doctl databases list`
 
-	databaseFirewallRulesTxt := "A comma-separated list of blahblah IDs to place behind the cloud firewall, e.g.: `123,456`"
+	databaseFirewallRulesTxt := "A comma-separated list of firewall rules of format type:value, e.g.: `type:value`"
 
-	CmdBuilder(cmd, RunDatabaseFirewallRulesList, "list <database-id>", "Retrieve list of firewall rules for given database", `Lists the following details for firewallwall rules for given database`+firewallRuleDetails+databaseFirewallRuleDetails,
-		Writer, aliasOpt("ls"),
-		displayerType(&displayers.DatabaseFirewallRules{}))
+	databaseFirewallUpdateDetails := `
+Use this command to replace the firewall rules of a given database. This command requires the ID of a database cluster, which you can retrieve by calling:
 
-	cmdDatabaseFirewallUpdate := CmdBuilder(cmd, RunDatabaseFirewallRulesUpdate, "update <db-id>", "Update a cloud firewall's configurationblahhh", `Use this command to update the configuration of an existing cloud firewall. The request should contain a full representation of the Firewall, including existing attributes. Note: Any attributes that are not provided will be reset to their default values. blahh`, Writer, aliasOpt("u"), displayerType(&displayers.Firewall{}))
-	AddStringSliceFlag(cmdDatabaseFirewallUpdate, doctl.ArgDatabaseFirewallRules, "", []string{}, databaseFirewallRulesTxt)
+	doctl databases list 
+	
+This command also requires a --rule flag. You can pass in multiple --rule flags. Each rule passed in to the --rule flag must be of format type:value
+	- "type" is the type of resource that the firewall rule allows to access the database cluster. The possible values for type are:  "droplet", "k8s", "ip_addr", or "tag"
+	- "value" is either the ID of the specific resource, the name of a tag applied to a group of resources, or the IP address that the firewall rule allows to access the database cluster
 
-	cmdDatabaseFirewallCreate := CmdBuilder(cmd, RunDatabaseFirewallRulesCreate, "add <db-id>", "Add a database firewall's configurationblahhh", `Use this command to add a firewall rule blahh. The request should contain a full representation of the Firewall, including existing attributes. Note: Any attributes that are not provided will be reset to their default values. blahh`,
+For example:
+	
+	doctl databases firewalls update d1234-1c12-1234-b123-12345c4789 --rule tag:backend --rule ip_addr:0.0.0.0
+
+	or
+
+	databases firewalls update d1234-1c12-1234-b123-12345c4789 --rule tag:backend,ip_addr:0.0.0.0
+
+This would replace the firewall rules for database of id d1234-1c12-1234-b123-12345c4789 with the two rules passed above (tag:backend, ip_addr:0.0.0.0)
+	`
+
+	databaseFirewallAddDetails :=
+		`
+Use this command to append a new rule to the existing firewall rules of a given database. This command requires the ID of a database cluster, which you can retrieve by calling:
+
+	doctl databases list
+
+This command also requires a --rule flag. Each rule passed in to the --rule flag must be of format type:value
+	- "type" is the type of resource that the firewall rule allows to access the database cluster. The possible values for type are:  "droplet", "k8s", "ip_addr", or "tag"
+	- "value" is either the ID of the specific resource, the name of a tag applied to a group of resources, or the IP address that the firewall rule allows to access the database cluster
+
+For example:
+
+	doctl databases firewalls add d1234-1c12-1234-b123-12345c4789 --rule tag:backend
+
+This would append the firewall rule "tag:backend" for database of id d1234-1c12-1234-b123-12345c4789`
+
+	databaseFirewallRemoveDetails :=
+		`
+Use this command to remove an existing rule from the list of firewall rules for a given database. This command requires the ID of a database cluster, which you can retrieve by calling:
+
+	doctl databases list
+
+This command also requires a --uuid flag. You must pass in the UUID of the firewall rule you'd like to remove. You can retrieve the firewall rule's UUIDs by calling:
+
+	doctl database firewalls list <db-id>
+
+For example:
+
+	doctl databases firewalls remove d1234-1c12-1234-b123-12345c4789 --uuid 12345d-1234-123d-123x-123eee456e
+
+This would remove the firewall rule of uuid 12345d-1234-123d-123x-123eee456e for database of id d1234-1c12-1234-b123-12345c4789
+			`
+
+	CmdBuilder(cmd, RunDatabaseFirewallRulesList, "list <database-id>", "Retrieve a list of firewall rules for a given database", firewallRuleDetails+databaseFirewallRuleDetails,
+		Writer, aliasOpt("ls"))
+
+	cmdDatabaseFirewallUpdate := CmdBuilder(cmd, RunDatabaseFirewallRulesUpdate, "update <db-id> --rules type:value [--rule type:value]", "Update the firewall rules for a given database. The rules passed in to the --rules flag will replace the firewall rules previously assigned to the database,", databaseFirewallUpdateDetails,
+		Writer, aliasOpt("u"))
+	AddStringSliceFlag(cmdDatabaseFirewallUpdate, doctl.ArgDatabaseFirewallRule, "", []string{}, databaseFirewallRulesTxt, requiredOpt())
+
+	cmdDatabaseFirewallCreate := CmdBuilder(cmd, RunDatabaseFirewallRulesCreate, "add <db-id> --rule type:value", "Add a database firewall rule to a given database", databaseFirewallAddDetails,
 		Writer, aliasOpt("a"))
-	AddStringFlag(cmdDatabaseFirewallCreate, doctl.ArgDatabaseFirewallRules, "", "", "", requiredOpt())
+	AddStringFlag(cmdDatabaseFirewallCreate, doctl.ArgDatabaseFirewallRule, "", "", "", requiredOpt())
+
+	cmdDatabaseFirewallRemove := CmdBuilder(cmd, RunDatabaseFirewallRulesRemove, "remove <firerule-uuid>", "Remove a firewall rule for a given database", databaseFirewallRemoveDetails,
+		Writer, aliasOpt("r"))
+	AddStringFlag(cmdDatabaseFirewallRemove, doctl.ArgDatabaseFirewallRuleUUID, "", "", "", requiredOpt())
 
 	return cmd
 
 }
 
-// RunDatabaseFirewallRulesUpdate updates the maintenance window info for a database cluster
+// displayDatabaseFirewallRules calls Get Firewall Rules to list all current rules.
+func displayDatabaseFirewallRules(c *CmdConfig, short bool, id string) error {
+	firewallRules, err := c.Databases().GetFirewallRules(id)
+	if err != nil {
+		// error here - doesn't like this get request - 405
+		return err
+	}
+
+	item := &displayers.DatabaseFirewallRules{
+		DatabaseFirewallRules: firewallRules,
+	}
+
+	return c.Display(item)
+}
+
+func firewallRulesArgumentCheck(c *CmdConfig) error {
+	if len(c.Args) == 0 {
+		return doctl.NewMissingArgsErr(c.NS)
+	}
+	if len(c.Args) > 1 {
+		return doctl.NewTooManyArgsErr(c.NS)
+	}
+	return nil
+}
+
+// RunDatabaseFirewallRulesList retrieves a list of firewalls for specific database cluster
+func RunDatabaseFirewallRulesList(c *CmdConfig) error {
+	err := firewallRulesArgumentCheck(c)
+	if err != nil {
+		return err
+	}
+
+	id := c.Args[0]
+
+	return displayDatabaseFirewallRules(c, true, id)
+}
+
+// RunDatabaseFirewallRulesUpdate replaces previous rules with the rules passed in to --rules
 func RunDatabaseFirewallRulesUpdate(c *CmdConfig) error {
+	err := firewallRulesArgumentCheck(c)
+	if err != nil {
+		return err
+	}
+
 	id := c.Args[0]
 	r, err := buildDatabaseUpdateFirewallRulesRequestFromArgs(c)
 	if err != nil {
 		return err
 	}
 
-	return c.Databases().UpdateFirewallRules(id, r)
+	err = c.Databases().UpdateFirewallRules(id, r)
+	if err != nil {
+		return err
+	}
+
+	return displayDatabaseFirewallRules(c, true, id)
+
 }
 
+// buildDatabaseUpdateFirewallRulesRequestFromArgs will ingest the --rules arguments into a DatabaseUpdateFirewallRulesRequest object.
 func buildDatabaseUpdateFirewallRulesRequestFromArgs(c *CmdConfig) (*godo.DatabaseUpdateFirewallRulesRequest, error) {
 	r := &godo.DatabaseUpdateFirewallRulesRequest{}
 
-	firewallRules, err := c.Doit.GetStringSlice(c.NS, doctl.ArgDatabaseFirewallRules)
+	firewallRules, err := c.Doit.GetStringSlice(c.NS, doctl.ArgDatabaseFirewallRule)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(firewallRules) == 0 {
+		return nil, errors.New("Must pass in a key:value pair for the --rule flag")
 	}
 
 	firewallRulesList, err := extractFirewallRules(firewallRules)
@@ -1247,20 +1336,15 @@ func buildDatabaseUpdateFirewallRulesRequestFromArgs(c *CmdConfig) (*godo.Databa
 
 }
 
-func extractFirewallRules(rulesStringList []string) (rules []*godo.DatabaseFirewallRule, err error) {
-	numOfRules := len(rulesStringList)
-	if numOfRules == 0 {
-		return nil, nil
-	}
-
-	//var firewallRulesList []*godo.DatabaseFirewallRule
+// extractFirewallRules will ingest the --rules arguments into a list of DatabaseFirewallRule objects.
+func extractFirewallRules(rulesStringList []string) (rules []*godo.DatabaseUpdateFirewallRule, err error) {
 	for _, rule := range rulesStringList {
 		pair := strings.SplitN(rule, ":", 2)
 		if len(pair) != 2 {
 			return nil, fmt.Errorf("Unexpected input value [%v], must be a key:value pair", pair)
 		}
 
-		firewallRule := new(godo.DatabaseFirewallRule)
+		firewallRule := new(godo.DatabaseUpdateFirewallRule)
 		firewallRule.Type = pair[0]
 		firewallRule.Value = pair[1]
 
@@ -1273,12 +1357,13 @@ func extractFirewallRules(rulesStringList []string) (rules []*godo.DatabaseFirew
 
 // RunDatabaseFirewallRulesCreate creates a firewall rule for a database cluster
 func RunDatabaseFirewallRulesCreate(c *CmdConfig) error {
-	// if len(c.Args) < 1 {
-	// 	return doctl.NewMissingArgsErr(c.NS)
-	// }
+	err := firewallRulesArgumentCheck(c)
+	if err != nil {
+		return err
+	}
 
 	databaseID := c.Args[0]
-	firewallRuleArg, err := c.Doit.GetString(c.NS, doctl.ArgDatabaseFirewallRules)
+	firewallRuleArg, err := c.Doit.GetString(c.NS, doctl.ArgDatabaseFirewallRule)
 	if err != nil {
 		return err
 	}
@@ -1288,14 +1373,142 @@ func RunDatabaseFirewallRulesCreate(c *CmdConfig) error {
 		return fmt.Errorf("Unexpected input value [%v], must be a key:value pair", pair)
 	}
 
-	req := &godo.DatabaseCreateFirewallRuleRequest{
-		Type:  pair[0],
-		Value: pair[1],
-	}
+	rFinal := []*godo.DatabasePatchFirewallRule{}
 
-	dbr, err := c.Databases().CreateFirewallRule(databaseID, req)
+	rFinal = append(rFinal, &godo.DatabasePatchFirewallRule{
+		Type:        pair[0],
+		Value:       pair[1],
+		ClusterUUID: databaseID,
+	})
+
+	// Create a slice of database firewall rules containing only the new rule.
+	// firewallRules := []*godo.DatabaseUpdateFirewallRule{
+	// 	{
+	// 		Type:  pair[0],
+	// 		Value: pair[1],
+	// 	},
+	// }
+
+	// Retrieve any existing firewall rules so that we don't destroy existing
+	// rules in the create request.
+	oldRules, err := c.Databases().GetFirewallRules(databaseID)
 	if err != nil {
 		return err
 	}
-	return displayDatabaseFirewallRules(c, true, *dbr)
+
+	// r := &godo.DatabaseUpdateFirewallRulesRequest{}
+
+	// r.Rules = firewallRules
+
+	// allFirewallRules := do.DatabaseFirewallRules{}
+
+	// for _, rule := range oldRules {
+	// 	allFirewallRules = append(allFirewallRules, rule)
+	// }
+
+	for _, rule := range oldRules {
+
+		firewallRule := new(godo.DatabasePatchFirewallRule)
+		firewallRule.Type = rule.Type
+		firewallRule.Value = rule.Value
+		firewallRule.ClusterUUID = rule.ClusterUUID
+		firewallRule.UUID = rule.UUID
+
+		rFinal = append(rFinal, firewallRule)
+	}
+
+	if err := c.Databases().PatchFirewallRules(databaseID, &godo.DatabasePatchFirewallRulesRequest{
+		Rules: rFinal,
+	}); err != nil {
+		return err
+	}
+
+	// // err = c.Databases().PatchFirewallRules(databaseID, allFirewallRules)
+	// // if err != nil {
+	// // 	return err
+	// // }
+
+	// // Retrieve any existing firewall rules so that we don't destroy existing
+	// // rules in the create request.
+	// justNewRule, err := c.Databases().GetFirewallRules(databaseID)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// // Create a slice of database firewall rules containing only the new rule.
+	// allFirewallRules := []*godo.DatabaseUpdateFirewallRulesRequest{}
+
+	// // Add the existing rules onto that slice of database firewall rules
+	// // so that we don't delete them when submitting the request.
+	// //
+	// // Any request to the update endpoint removes all old rules and full
+	// // replaces them with new ones, making this necessary to provide CLI users
+	// // with expected behaviour.
+	// for _, rule := range rules {
+	// 	allFirewallRules = append(allFirewallRules, rules)
+	// }
+
+	// // The `UpdateFirewallRules` method is the only one that allows submitting
+	// // a slice of firewall rules, so we need to use that instead of the create
+	// // method.
+	// if err := c.Databases().PatchFirewallRules(databaseID, &godo.DatabasePatchFirewallRulesRequest{
+	// 	Rules: firewallRules,
+	// }); err != nil {
+	// 	return err
+	// }
+
+	return displayDatabaseFirewallRules(c, true, databaseID)
+}
+
+// RunDatabaseFirewallRulesRemove removes a firewall rule for a database cluster
+func RunDatabaseFirewallRulesRemove(c *CmdConfig) error {
+	err := firewallRulesArgumentCheck(c)
+	if err != nil {
+		return err
+	}
+
+	databaseID := c.Args[0]
+
+	firewallRuleUUIDArg, err := c.Doit.GetString(c.NS, doctl.ArgDatabaseFirewallRuleUUID)
+	if err != nil {
+		return err
+	}
+
+	// Retrieve any existing firewall rules so that we don't destroy existing
+	// rules in the create request.
+	rules, err := c.Databases().GetFirewallRules(databaseID)
+	if err != nil {
+		return err
+	}
+
+	// Create a slice of database firewall rules containing only the new rule.
+	firewallRules := []*godo.DatabasePatchFirewallRule{}
+
+	// Add the existing rules onto that slice of database firewall rules
+	// so that we don't delete them when submitting the request.
+	//
+	// Any request to the update endpoint removes all old rules and full
+	// replaces them with new ones, making this necessary to provide CLI users
+	// with expected behaviour.
+	for _, rule := range rules {
+		if rule.UUID != firewallRuleUUIDArg {
+			firewallRules = append(firewallRules, &godo.DatabasePatchFirewallRule{
+				UUID:        rule.UUID,
+				ClusterUUID: rule.ClusterUUID,
+				Type:        rule.Type,
+				Value:       rule.Value,
+			})
+		}
+	}
+
+	// The `UpdateFirewallRules` method is the only one that allows submitting
+	// a slice of firewall rules, so we need to use that instead of the create
+	// method.
+	if err := c.Databases().PatchFirewallRules(databaseID, &godo.DatabasePatchFirewallRulesRequest{
+		Rules: firewallRules,
+	}); err != nil {
+		return err
+	}
+
+	return displayDatabaseFirewallRules(c, true, databaseID)
 }

@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var _ = suite("database/firewalls", func(t *testing.T, when spec.G, it spec.S) {
+var _ = suite.Focus("database/firewalls", func(t *testing.T, when spec.G, it spec.S) {
 	var (
 		expect *require.Assertions
 		server *httptest.Server
@@ -36,11 +36,11 @@ var _ = suite("database/firewalls", func(t *testing.T, when spec.G, it spec.S) {
 					reqBody, err := ioutil.ReadAll(req.Body)
 					expect.NoError(err)
 
-					expect.JSONEq(databasesUpdateFirewallUpdateRequest, string(reqBody))
+					expect.JSONEq(databasesAddFirewallRequest, string(reqBody))
 
-					w.Write([]byte(databasesUpdateFirewallRuleResponse))
+					w.Write([]byte(databasesAddFirewallRuleResponse))
 				} else if req.Method == http.MethodGet {
-					w.Write([]byte(databasesUpdateFirewallRuleResponse))
+					w.Write([]byte(databasesAddFirewallRuleResponse))
 				} else {
 					w.WriteHeader(http.StatusMethodNotAllowed)
 					return
@@ -56,23 +56,23 @@ var _ = suite("database/firewalls", func(t *testing.T, when spec.G, it spec.S) {
 		}))
 	})
 
-	when("command is update", func() {
-		it("update a database cluster's firewall rules", func() {
+	when("command is add", func() {
+		it("add a database cluster's firewall rules", func() {
 			cmd := exec.Command(builtBinaryPath,
 				"-t", "some-magic-token",
 				"-u", server.URL,
 				"databases",
 				"firewalls",
-				"update",
+				"add",
 				"d168d635-1c88-4616-b9b4-793b7c573927",
-				"--rule", "ip_addr:192.168.1.1",
+				"--rule", "tag:newFirewall",
 			)
 
 			output, err := cmd.CombinedOutput()
 			expect.NoError(err, fmt.Sprintf("received error output: %s", output))
-			expect.Equal(strings.TrimSpace(databasesUpdateFirewallRuleOutput), strings.TrimSpace(string(output)))
+			expect.Equal(strings.TrimSpace(databasesAddFirewallRuleOutput), strings.TrimSpace(string(output)))
 
-			expected := strings.TrimSpace(databasesUpdateFirewallRuleOutput)
+			expected := strings.TrimSpace(databasesAddFirewallRuleResponse)
 			actual := strings.TrimSpace(string(output))
 
 			if expected != actual {
@@ -84,20 +84,20 @@ var _ = suite("database/firewalls", func(t *testing.T, when spec.G, it spec.S) {
 })
 
 const (
-	databasesUpdateFirewallUpdateRequest = `{"rules": [{"type": "ip_addr","value": "192.168.1.1"}]}`
+	databasesAddFirewallRequest = `{"rules": [{"type": "tag","value": "newFirewall"}]}`
 
-	databasesUpdateFirewallRuleOutput = `
-UUID                                    ClusterUUID                             Type       Value          Created At
-82ebbbd4-437c-4e11-bfd2-644ccb555de0    d168d635-1c88-4616-b9b4-793b7c573927    ip_addr    192.168.1.1    2021-01-29 19:59:35 +0000 UTC`
+	databasesAddFirewallRuleOutput = `
+UUID                                    ClusterUUID                             Type    Value          Created At
+5cdafe5d-1bd6-4d8d-b59e-f89873106113    d168d635-1c88-4616-b9b4-793b7c573927    tag     newFirewall    2021-02-01 20:07:53 +0000 UTC`
 
-	databasesUpdateFirewallRuleResponse = `{
+	databasesAddFirewallRuleResponse = `{
 		"rules":[
 		   {
-			  "uuid":"82ebbbd4-437c-4e11-bfd2-644ccb555de0",
+			  "uuid":"5cdafe5d-1bd6-4d8d-b59e-f89873106113",
 			  "cluster_uuid":"d168d635-1c88-4616-b9b4-793b7c573927",
-			  "type":"ip_addr",
-			  "value":"192.168.1.1",
-			  "created_at":"2021-01-29T19:59:35Z"
+			  "type":"tag",
+			  "value":"newFirewall",
+			  "created_at":"2021-02-01T18:36:14Z"
 		   }
 		]
 	 }`

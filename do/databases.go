@@ -127,7 +127,7 @@ type DatabasesService interface {
 
 	GetFirewallRules(string) (DatabaseFirewallRules, error)
 	UpdateFirewallRules(databaseID string, req *godo.DatabaseUpdateFirewallRulesRequest) error
-	CreateFirewallRule(databaseID string, req *godo.DatabaseCreateFirewallRuleRequest) (*DatabaseFirewallRule, error)
+	PatchFirewallRules(databaseID string, req *godo.DatabasePatchFirewallRulesRequest) error
 }
 
 type databasesService struct {
@@ -534,10 +534,8 @@ func (ds *databasesService) UpdateFirewallRules(databaseID string, req *godo.Dat
 	return err
 }
 
-func (ds *databasesService) CreateFirewallRule(databaseID string, req *godo.DatabaseCreateFirewallRuleRequest) (*DatabaseFirewallRule, error) {
-	fr, _, err := ds.client.Databases.CreateFirewallRule(context.TODO(), databaseID, req)
-	if err != nil {
-		return nil, err
-	}
-	return &DatabaseFirewallRule{DatabaseFirewallRule: fr}, nil
+func (ds *databasesService) PatchFirewallRules(databaseID string, req *godo.DatabasePatchFirewallRulesRequest) error {
+	_, err := ds.client.Databases.PatchFirewallRules(context.TODO(), databaseID, req)
+
+	return err
 }
