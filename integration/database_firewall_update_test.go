@@ -70,7 +70,10 @@ var _ = suite("database/firewalls", func(t *testing.T, when spec.G, it spec.S) {
 
 			output, err := cmd.CombinedOutput()
 			expect.NoError(err, fmt.Sprintf("received error output: %s", output))
+<<<<<<< HEAD
 			expect.Equal(strings.TrimSpace(databasesUpdateFirewallRuleOutput), strings.TrimSpace(string(output)))
+=======
+>>>>>>> 7b764d45b13864c3c93a26e57f98a6fa77657cb1
 
 			expected := strings.TrimSpace(databasesUpdateFirewallRuleOutput)
 			actual := strings.TrimSpace(string(output))
