@@ -1267,7 +1267,7 @@ func buildDatabaseUpdateFirewallRulesRequestFromArgs(c *CmdConfig, clusterUUID s
 		return nil, err
 	}
 
-	firewallRulesList, err := extractFirewallRules(firewallRules)
+	firewallRulesList, err := extractFirewallRules(clusterUUID, firewallRules)
 	if err != nil {
 		return nil, err
 	}
@@ -1277,7 +1277,7 @@ func buildDatabaseUpdateFirewallRulesRequestFromArgs(c *CmdConfig, clusterUUID s
 
 }
 
-func extractFirewallRules(rulesStringList []string) (rules []*godo.DatabaseFirewallRule, err error) {
+func extractFirewallRules(clusterUUID string, rulesStringList []string) (rules []*godo.DatabaseFirewallRule, err error) {
 	numOfRules := len(rulesStringList)
 	if numOfRules == 0 {
 		return nil, nil
@@ -1291,6 +1291,7 @@ func extractFirewallRules(rulesStringList []string) (rules []*godo.DatabaseFirew
 		}
 
 		firewallRule := new(godo.DatabaseFirewallRule)
+		firewallRule.ClusterUUID = clusterUUID
 		firewallRule.Type = pair[0]
 		firewallRule.Value = pair[1]
 
