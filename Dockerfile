@@ -1,7 +1,7 @@
 # Step 1: Build
 FROM golang:1.15-alpine AS build
 
-ARG GOARCH=amd64
+ARG GOARCH=arm64
 ENV OUT_D /out
 
 RUN mkdir -p /out
